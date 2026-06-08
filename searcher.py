@@ -196,5 +196,11 @@ def rank_hotels(hotels: List[Hotel]) -> List[Hotel]:
     sorted_hotels.sort(key=lambda h: h.rating, reverse=True)
     return sorted_hotels
 
+def search_alternative_flights(brief: TravelBrief, exclude_flight_id: str) -> List[Flight]:
+    """Search for flights matching criteria, excluding a specific flight ID."""
+    all_flights = search_flights(brief)
+    return [f for f in all_flights if f.flight_id != exclude_flight_id]
+
+
 
 
