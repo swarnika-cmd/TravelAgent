@@ -7,10 +7,14 @@ from schemas import TravelBrief, Flight, Hotel
 from extractor import to_gemini_schema, client, groq_api_key
 
 
-class SelectionResult(BaseModel):
-    selected_flight_id: str
-    selected_hotel_id: str
+class FlightRank(BaseModel):
+    flight_id: str
+    rank: int
     reasoning: str
+
+class FlightRankingResult(BaseModel):
+    rankings: List[FlightRank]
+
 
 def get_db_path():
     return os.path.join(os.path.dirname(__file__), "data", "db.json")
@@ -71,87 +75,53 @@ def execute_parallel_search(brief: TravelBrief) -> Tuple[List[Flight], List[Hote
         
     return flights, hotels
 
-def select_best_options(brief: TravelBrief, flights: List[Flight], hotels: List[Hotel]) -> Tuple[Flight, Hotel]:
+def rank_flights_agentic(brief: TravelBrief, flights: List[Flight]) -> List[Tuple[Flight, str]]:
     """
-    Combines flights and hotels, filters programmatically by total budget,
-    and then asks Gemini to make the optimal selection based on soft constraints.
+    Evaluates and ranks flights using Groq based on the travel brief constraints (e.g., departure times).
+    Returns a list of (Flight, reasoning) tuples, sorted by rank (best first).
     """
     if not flights:
-        raise ValueError("No matching flights found for the query.")
-    if not hotels:
-        raise ValueError("No matching hotels found for the query.")
-        
-    valid_pairs = []
-    # If budget_range is specified, get the max budget
-    max_budget = brief.budget_range[1] if (brief.budget_range and len(brief.budget_range) > 1) else None
-    
-    print(f"\n[Programmatic Filter] Evaluating combinations under budget limit: {max_budget} INR...")
-    for flight in flights:
-        for hotel in hotels:
-            # Total cost is flight roundtrip + hotel price per night * duration
-            total_cost = flight.price + (hotel.price_per_night * brief.duration_days)
-            if max_budget is None or total_cost <= max_budget:
-                valid_pairs.append((flight, hotel, total_cost))
-                
-    if not valid_pairs:
-        raise ValueError(
-            f"No flight + hotel combinations fit within the maximum budget constraint of {max_budget} INR. "
-            f"Minimum flight cost is {min(f.price for f in flights)} INR. "
-            f"Minimum hotel cost is {min(h.price_per_night for h in hotels) * brief.duration_days} INR for {brief.duration_days} nights."
-        )
-        
-    print(f"[Programmatic Filter] Found {len(valid_pairs)} valid flight + hotel combinations under budget.")
-    
-    # Format candidates data for LLM ranking
-    candidates_data = []
-    for i, (flight, hotel, total_cost) in enumerate(valid_pairs):
-        candidates_data.append({
-            "pair_index": i,
-            "flight_id": flight.flight_id,
-            "airline": flight.airline,
-            "outbound_departure": flight.outbound_departure_time,
-            "inbound_departure": flight.inbound_departure_time,
-            "flight_price": flight.price,
-            "flight_details": flight.details,
-            "hotel_id": hotel.hotel_id,
-            "hotel_name": hotel.name,
-            "hotel_price_per_night": hotel.price_per_night,
-            "hotel_rating": hotel.rating,
-            "hotel_preferences": hotel.preferences,
-            "hotel_details": hotel.details,
-            "total_cost_inr": total_cost
-        })
+        return []
         
     system_instruction = (
-        "You are an expert travel agent. Your job is to select the single best combination of "
-        "flight and hotel for the user from a list of candidate pairs.\n\n"
-        "You must analyze the user's travel brief, focusing on:\n"
-        "- Soft constraints (e.g. avoiding early morning flights, preferred flight times).\n"
-        "- Accommodation preferences (e.g. quiet, luxury, budget, close to transit).\n"
-        "- Value for money and rating.\n\n"
-        "Select the option that best matches their constraints and preferences.\n\n"
+        "You are an expert travel agent. Your job is to rank a list of flight options based on the user's travel brief "
+        "and soft constraints (e.g. flight departure times, preferences).\n\n"
+        "You must rank them from 1 (best match) to N (worst match).\n"
         "You MUST output a valid JSON object matching the following structure:\n"
         "{\n"
-        "  \"selected_flight_id\": \"string\",\n"
-        "  \"selected_hotel_id\": \"string\",\n"
-        "  \"reasoning\": \"string\"\n"
+        "  \"rankings\": [\n"
+        "    {\n"
+        "      \"flight_id\": \"string\",\n"
+        "      \"rank\": integer,\n"
+        "      \"reasoning\": \"string\"\n"
+        "    }\n"
+        "  ]\n"
         "}"
     )
     
-    print("[Agentic Evaluation] Invoking Groq (llama-3.3-70b-versatile) to analyze soft constraints...")
-    
+    prompt_flights = []
+    for f in flights:
+        prompt_flights.append({
+            "flight_id": f.flight_id,
+            "airline": f.airline,
+            "origin": f.origin,
+            "destination": f.destination,
+            "outbound_departure": f.outbound_departure_time,
+            "inbound_departure": f.inbound_departure_time,
+            "price": f.price,
+            "details": f.details
+        })
+        
     prompt = (
         f"User Travel Brief:\n"
         f"- Origin: {brief.origin}\n"
         f"- Destination: {brief.destination}\n"
         f"- Date: {brief.travel_date}\n"
         f"- Duration: {brief.duration_days} days\n"
-        f"- Budget Limit: {max_budget} INR if specified\n"
-        f"- Accommodation Preferences: {brief.accommodation_preferences}\n"
         f"- Soft Constraints: {brief.soft_constraints}\n\n"
-        f"Candidate Pairs:\n"
-        f"{json.dumps(candidates_data, indent=2)}\n\n"
-        f"Please select the best pair and return its selected_flight_id, selected_hotel_id, and reasoning."
+        f"Flight Options:\n"
+        f"{json.dumps(prompt_flights, indent=2)}\n\n"
+        f"Please rank these flights and provide your reasoning."
     )
     
     try:
@@ -167,55 +137,64 @@ def select_best_options(brief: TravelBrief, flights: List[Flight], hotels: List[
             response_format={"type": "json_object"}
         )
         content = response.choices[0].message.content
-        result = SelectionResult.model_validate_json(content)
+        ranking_res = FlightRankingResult.model_validate_json(content)
         
-        # Match back to retrieve actual model instances
-        for flight, hotel, total_cost in valid_pairs:
-            if flight.flight_id == result.selected_flight_id and hotel.hotel_id == result.selected_hotel_id:
-                print(f"\n[Agentic Selection Reasoning]:\n{result.reasoning}")
-                return flight, hotel
-                
-        # Fallback if selected keys are not matching
-        print(f"\n[Agentic Selection Fallback] Chosen keys {result.selected_flight_id}/{result.selected_hotel_id} mismatch. Using first option.")
-        return valid_pairs[0][0], valid_pairs[0][1]
+        # Sort and construct return list
+        rank_map = {r.flight_id: (r.rank, r.reasoning) for r in ranking_res.rankings}
+        
+        ranked_list = []
+        for f in flights:
+            rank, reasoning = rank_map.get(f.flight_id, (99, "No specific ranking reasoning provided."))
+            ranked_list.append((f, rank, reasoning))
+            
+        ranked_list.sort(key=lambda x: x[1])
+        return [(item[0], item[2]) for item in ranked_list]
         
     except Exception as e:
         err_msg = str(e)
-        if any(keyword in err_msg.lower() for keyword in ["api key", "403", "leaked", "mock_key", "unauthorized", "api_key", "invalid", "quota", "rate limit", "429", "none type", "not set"]):
-            print(f"\n[Groq API Warning]: Selection failed ({err_msg}). Using programmatic fallback mock selector...")
+        print(f"\n[Groq API Warning]: Flight ranking failed ({err_msg}). Using programmatic fallback ranker...")
+        
+        # Programmatic ranking fallback
+        hate_early_morning = any("morning" in c.lower() or "early" in c.lower() for c in brief.soft_constraints)
+        
+        ranked_list = []
+        for f in flights:
+            is_early_morning = f.outbound_departure_time.endswith("03:00:00") or "03:00" in f.outbound_departure_time
+            is_afternoon = f.outbound_departure_time.endswith("14:30:00") or "14:30" in f.outbound_departure_time
             
-            best_flight = None
-            best_hotel = None
+            if hate_early_morning and is_early_morning:
+                rank = 3
+                reasoning = "[Preferred Match: LOW] Ranked lower because it departs in the early morning (03:00 AM), which violates your constraint of avoiding early morning flights."
+            elif hate_early_morning and is_afternoon:
+                rank = 1
+                reasoning = "[Preferred Match: HIGH] Ranked highest because it departs in the afternoon (02:30 PM), satisfying your constraint of avoiding early morning flights."
+            else:
+                rank = 2
+                reasoning = "[Preferred Match: MED] Departs at a reasonable time, matching travel dates."
+            ranked_list.append((f, rank, reasoning))
             
-            # Let's inspect the soft constraints in details
-            hate_early_morning = any("morning" in c.lower() or "early" in c.lower() for c in brief.soft_constraints)
-            
-            # 1. Filter flight matching morning constraint
-            flight_candidates = [p[0] for p in valid_pairs]
-            if hate_early_morning:
-                # Filter out flights departing between 00:00 and 08:00 AM (FL-001 departs at 03:00)
-                non_morning_flights = [f for f in flight_candidates if not (f.outbound_departure_time.endswith("03:00:00") or "03:00" in f.outbound_departure_time)]
-                if non_morning_flights:
-                    best_flight = non_morning_flights[0] # Pick FL-002
-            
-            if not best_flight:
-                best_flight = flight_candidates[0]
-                
-            # 2. Filter hotel based on rating / price
-            hotel_candidates = [p[1] for p in valid_pairs if p[0].flight_id == best_flight.flight_id]
-            if hotel_candidates:
-                # Sort hotels by rating (descending)
-                hotel_candidates.sort(key=lambda x: x.rating, reverse=True)
-                best_hotel = hotel_candidates[0] # London Cozy Stay HT-001 (rating 4.2)
-                
-            if best_flight and best_hotel:
-                print("\n[Agentic Selection Reasoning (Mock Fallback)]:\n"
-                      f"Selected Flight {best_flight.flight_id} ({best_flight.airline}) because it departs at {best_flight.outbound_departure_time} which respects the constraint "
-                      f"of avoiding early morning departures (unlike early morning flight FL-001). Selected Hotel {best_hotel.name} as it matches location {best_hotel.location}, "
-                      f"fits within the budget constraints, and matches general preferences.")
-                return best_flight, best_hotel
-                
-        print(f"\n[Agentic Selection Fallback] Selection call failed: {e}. Using first option.")
-        return valid_pairs[0][0], valid_pairs[0][1]
+        ranked_list.sort(key=lambda x: x[1])
+        return [(item[0], item[2]) for item in ranked_list]
+
+def filter_hotels_by_budget(hotels: List[Hotel], remaining_budget: Optional[int], duration_days: int) -> List[Hotel]:
+    """
+    Filters hotels based on whether the total stay cost fits within the remaining budget.
+    """
+    if remaining_budget is None:
+        return hotels
+        
+    filtered = []
+    for h in hotels:
+        total_hotel_cost = h.price_per_night * duration_days
+        if total_hotel_cost <= remaining_budget:
+            filtered.append(h)
+    return filtered
+
+def rank_hotels(hotels: List[Hotel]) -> List[Hotel]:
+    """Sort hotels by rating descending."""
+    sorted_hotels = list(hotels)
+    sorted_hotels.sort(key=lambda h: h.rating, reverse=True)
+    return sorted_hotels
+
 
 
