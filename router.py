@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
 from schemas import TravelBrief
+from searcher import execute_parallel_search, select_best_options
+from itinerary import assemble_itinerary
 
 class RoutingStrategy(ABC):
     @abstractmethod
@@ -32,26 +34,37 @@ class SearchInitializationStrategy(RoutingStrategy):
         print("\n--- [SearchInitializationStrategy] ---")
         print("Routing Decision: SEARCH INITIALIZATION")
         print("Reason: Travel Brief is complete. Handing off parameters to parallel flight and hotel search engines.")
-        print("Parameter Handoff Data:")
-        print(f"  - Origin: {brief.origin}")
-        print(f"  - Destination: {brief.destination}")
-        print(f"  - Dates/Departure: {brief.travel_date}")
-        print(f"  - Duration: {brief.duration_days} days")
-        print(f"  - Travellers: {brief.traveller_count}")
-        if brief.budget_range:
-            print(f"  - Budget Range: Min={brief.budget_range[0]}, Max={brief.budget_range[1]}")
-        else:
-            print("  - Budget Range: Not specified")
-        if brief.accommodation_preferences:
-            print(f"  - Accommodation Preferences: {', '.join(brief.accommodation_preferences)}")
-        else:
-            print("  - Accommodation Preferences: None specified")
-        if brief.soft_constraints:
-            print(f"  - Soft Constraints / Requirements:")
-            for constraint in brief.soft_constraints:
-                print(f"    * \"{constraint}\"")
-        else:
-            print("  - Soft Constraints / Requirements: None specified")
+        
+        try:
+            # 1. Execute parallel search for flights and hotels
+            flights, hotels = execute_parallel_search(brief)
+            
+            # 2. Select the best flight and hotel based on constraints (programmatic + agentic LLM)
+            flight, hotel = select_best_options(brief, flights, hotels)
+            
+            # 3. Stitch selected elements into a chronological itinerary
+            itinerary = assemble_itinerary(brief, flight, hotel)
+            
+            print("\n" + "=" * 60)
+            print("               FINAL CHRONOLOGICAL ITINERARY")
+            print("=" * 60)
+            print(f"  Flight: {flight.airline} ({flight.flight_id}) - {flight.origin} to {flight.destination}")
+            print(f"  Hotel:  {hotel.name} ({hotel.location}) - Rating: {hotel.rating} stars")
+            print(f"  Total Cost: {itinerary.total_cost:,} INR (Flight: {flight.price:,} + Hotel: {hotel.price_per_night * brief.duration_days:,} INR)")
+            print("-" * 60)
+            print("  Timeline:")
+            for idx, event in enumerate(itinerary.timeline, 1):
+                clean_time = event.timestamp.replace("T", " ")
+                print(f"  {idx:02d}. [{event.event_type}] @ {clean_time}")
+                print(f"      Location: {event.location}")
+                print(f"      Details:  {event.description}")
+            print("=" * 60)
+            
+            print("\nFinalItinerary Model (Structured JSON):")
+            print(itinerary.model_dump_json(indent=2))
+            
+        except Exception as e:
+            print(f"\n[ERROR] Search initialization or itinerary assembly failed: {e}")
 
 class TravelRouter:
     @staticmethod
@@ -61,3 +74,4 @@ class TravelRouter:
             return ClarificationStrategy()
         else:
             return SearchInitializationStrategy()
+

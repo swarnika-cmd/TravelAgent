@@ -1,0 +1,111 @@
+{
+  "flights": [
+    {
+      "flight_id": "FL-001",
+      "airline": "Air India",
+      "origin": "Mumbai",
+      "destination": "London",
+      "outbound_departure_time": "2026-07-15T03:00:00",
+      "outbound_arrival_time": "2026-07-15T08:30:00",
+      "inbound_departure_time": "2026-07-21T09:30:00",
+      "inbound_arrival_time": "2026-07-21T21:45:00",
+      "price": 60000,
+      "details": "Direct flight. Early morning departure."
+    },
+    {
+      "flight_id": "FL-002",
+      "airline": "British Airways",
+      "origin": "Mumbai",
+      "destination": "London",
+      "outbound_departure_time": "2026-07-15T14:30:00",
+      "outbound_arrival_time": "2026-07-15T19:55:00",
+      "inbound_departure_time": "2026-07-21T11:45:00",
+      "inbound_arrival_time": "2026-07-21T23:55:00",
+      "price": 75000,
+      "details": "Direct flight. Afternoon departure."
+    },
+    {
+      "flight_id": "FL-003",
+      "airline": "Emirates",
+      "origin": "Mumbai",
+      "destination": "London",
+      "outbound_departure_time": "2026-07-15T21:00:00",
+      "outbound_arrival_time": "2026-07-16T07:15:00",
+      "inbound_departure_time": "2026-07-21T22:00:00",
+      "inbound_arrival_time": "2026-07-22T08:30:00",
+      "price": 135000,
+      "details": "One stop in Dubai. Late night departure."
+    },
+    {
+      "flight_id": "FL-004",
+      "airline": "Air France",
+      "origin": "Mumbai",
+      "destination": "Paris",
+      "outbound_departure_time": "2026-07-15T12:00:00",
+      "outbound_arrival_time": "2026-07-15T17:30:00",
+      "inbound_departure_time": "2026-07-21T10:00:00",
+      "inbound_arrival_time": "2026-07-21T21:30:00",
+      "price": 50000,
+      "details": "One stop in Paris."
+    },
+    {
+      "flight_id": "FL-005",
+      "airline": "Lufthansa",
+      "origin": "Delhi",
+      "destination": "London",
+      "outbound_departure_time": "2026-07-15T09:00:00",
+      "outbound_arrival_time": "2026-07-15T15:30:00",
+      "inbound_departure_time": "2026-07-21T13:00:00",
+      "inbound_arrival_time": "2026-07-21T23:50:00",
+      "price": 58000,
+      "details": "Departs from Delhi (DEL) with layover in Frankfurt."
+    }
+  ],
+  "hotels": [
+    {
+      "hotel_id": "HT-001",
+      "name": "London Cozy Stay",
+      "location": "London",
+      "price_per_night": 10000,
+      "rating": 4.2,
+      "preferences": ["quiet", "close to transit", "hotel"],
+      "details": "A charming, quiet hotel near Paddington Station. Highly rated for peace and accessibility."
+    },
+    {
+      "hotel_id": "HT-002",
+      "name": "London Luxury Suite",
+      "location": "London",
+      "price_per_night": 25000,
+      "rating": 4.8,
+      "preferences": ["luxury", "spa", "hotel"],
+      "details": "Ultra-luxury hotel in central London with an indoor pool and spa. Exquisite experience."
+    },
+    {
+      "hotel_id": "HT-003",
+      "name": "London Budget Hostel",
+      "location": "London",
+      "price_per_night": 4000,
+      "rating": 3.5,
+      "preferences": ["cheap", "hostel", "lively"],
+      "details": "Vibrant and budget-friendly hostel in Soho. Ideal for backpackers and social travelers."
+    },
+    {
+      "hotel_id": "HT-004",
+      "name": "Paris Boutique Hotel",
+      "location": "Paris",
+      "price_per_night": 15000,
+      "rating": 4.5,
+      "preferences": ["boutique", "romantic", "hotel"],
+      "details": "Beautifully styled boutique hotel near the Eiffel Tower, perfect for couples."
+    },
+    {
+      "hotel_id": "HT-005",
+      "name": "London Airport Transit Hotel",
+      "location": "London",
+      "price_per_night": 8000,
+      "rating": 3.9,
+      "preferences": ["convenient", "airport", "hotel"],
+      "details": "Functional hotel connected directly to Heathrow terminal. Best for short stays."
+    }
+  ]
+}
