@@ -6,6 +6,28 @@ def parse_iso(time_str: str) -> datetime:
     """Parse ISO datetime string."""
     return datetime.fromisoformat(time_str)
 
+# Airport to City mapping for location validation matching
+AIRPORT_TO_CITY = {
+    "lhr": "london",
+    "lgw": "london",
+    "lcy": "london",
+    "jfk": "new york",
+    "lga": "new york",
+    "ewr": "new york",
+    "bom": "mumbai",
+    "del": "delhi",
+    "blr": "bangalore",
+    "dxb": "dubai",
+    "sin": "singapore",
+    "cdg": "paris",
+    "ory": "paris"
+}
+
+def resolve_location(loc: str) -> str:
+    """Standardizes locations to city names (e.g. airport codes like LHR to London)."""
+    val = loc.strip().lower()
+    return AIRPORT_TO_CITY.get(val, val)
+
 def validate_itinerary(itinerary: FinalItinerary) -> List[str]:
     """
     Scans the chronological timeline for time, space, and budget conflicts.
@@ -14,8 +36,8 @@ def validate_itinerary(itinerary: FinalItinerary) -> List[str]:
     errors = []
     
     # 1. Location / Space Validation
-    flight_dest = itinerary.flight.destination.strip().lower()
-    hotel_loc = itinerary.hotel.location.strip().lower()
+    flight_dest = resolve_location(itinerary.flight.destination)
+    hotel_loc = resolve_location(itinerary.hotel.location)
     
     if flight_dest != hotel_loc:
         errors.append(
@@ -35,10 +57,10 @@ def validate_itinerary(itinerary: FinalItinerary) -> List[str]:
             )
             
     # Find specific key events
-    outbound_arrival = next((e for e in timeline if e.event_type == "FLIGHT_ARRIVAL" and e.location.lower() == hotel_loc), None)
+    outbound_arrival = next((e for e in timeline if e.event_type == "FLIGHT_ARRIVAL" and resolve_location(e.location) == hotel_loc), None)
     hotel_checkin = next((e for e in timeline if e.event_type == "HOTEL_CHECK_IN"), None)
     hotel_checkout = next((e for e in timeline if e.event_type == "HOTEL_CHECK_OUT"), None)
-    inbound_departure = next((e for e in timeline if e.event_type == "FLIGHT_DEPARTURE" and e.location.lower() == hotel_loc), None)
+    inbound_departure = next((e for e in timeline if e.event_type == "FLIGHT_DEPARTURE" and resolve_location(e.location) == hotel_loc), None)
     
     if outbound_arrival and hotel_checkin:
         arr_time = parse_iso(outbound_arrival.timestamp)

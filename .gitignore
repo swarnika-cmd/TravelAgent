@@ -1,0 +1,25 @@
+# Sensitive Environment Variables
+.env
+.env.local
+.env.*.local
+*.env
+
+# Python caching
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+
+# Virtual Environments
+venv/
+.venv/
+env/
+ENV/
+
+# OS/IDE metadata
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
