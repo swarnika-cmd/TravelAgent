@@ -266,3 +266,50 @@ my flight got cancelled   ·   delay 3 hours   ·   change to 2026-08-15
 <br>
 <sub>Built with a small Python state machine, Google Gemini, and care for the journey.</sub>
 </div>
+
+## Running the Test Suite
+
+Safar includes a comprehensive failure-focused test suite that validates the planner's behavior under edge cases and service failures.
+
+The tests use Python's built-in `unittest` framework, so no additional testing dependencies are required.
+
+### Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### Run the tests
+
+From the project root:
+
+```bash
+python tests/test_agent_failures.py
+```
+
+Or with the unittest runner:
+
+```bash
+python -m unittest tests.test_agent_failures
+```
+
+### What is covered?
+
+The suite mocks external services (`llm`, `storage`, `searcher`, etc.) and verifies that the agent fails gracefully in difficult scenarios.
+
+| Test                                    | Purpose                                                                                  |
+| --------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Rate Limit Exceeded                     | Verifies the agent returns a call-limit warning when `storage.check_rate_limit()` fails. |
+| Missing Flights for Delay Intent        | Ensures flight-delay requests are handled safely when the itinerary contains no flights. |
+| No Alternative Flights for Cancellation | Simulates cancelled flights when `searcher.find_flights()` returns no alternatives.      |
+| Invalid Date Extraction                 | Confirms malformed date values from the LLM do not crash date-change flows.              |
+| Empty Destination Suggestions           | Checks behavior when `llm.suggest_destinations()` returns no recommendations.            |
+| Garbage Data Fault Tolerance            | Sends malformed structured data into `_apply_updates()` to verify defensive handling.    |
+| Over-Budget Safeguards                  | Forces itinerary costs beyond the user's budget and validates warning prompts.           |
+
+### Notes
+
+* External APIs are mocked and are **not called** during testing.
+* The suite can be executed without a Gemini API key.
+* Tests focus on resilience, validation, and recovery behavior rather than itinerary quality.
+
