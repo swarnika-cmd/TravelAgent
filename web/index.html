@@ -59,7 +59,29 @@
           <span class="plan__total-figure" id="planTotal">—</span>
           <span class="plan__total-note" id="planTotalNote"></span>
         </div>
-        <div class="plan__legs" id="planLegs"></div>
+        <div class="plan__side">
+          <div class="plan__legs" id="planLegs"></div>
+          <div class="plan__actions">
+            <div class="menu" id="tripMenu">
+              <button class="btn btn--ghost" id="tripBtn" aria-haspopup="true" aria-expanded="false">Trip actions ▾</button>
+              <div class="menu__pop" id="tripPop" hidden>
+                <button class="menu__item" type="button" data-act="cancel_flight">Flight cancelled — rebook cheapest</button>
+                <div class="menu__line">
+                  <span>Delay flight</span>
+                  <select id="delayHrs"><option value="2">2h</option><option value="3" selected>3h</option><option value="6">6h</option></select>
+                  <button class="menu__go" type="button" data-act="delay_flight">Apply</button>
+                </div>
+                <div class="menu__line">
+                  <input type="date" id="newDate" aria-label="New travel date" />
+                  <button class="menu__go" type="button" data-act="change_dates">Change date</button>
+                </div>
+                <button class="menu__item" type="button" data-act="new_trip">Start a new trip</button>
+              </div>
+            </div>
+            <button class="btn btn--ghost" id="shareBtn" title="Copy a link to this trip">Share</button>
+            <button class="btn btn--ghost" id="printBtn" title="Print or save as PDF">Print</button>
+          </div>
+        </div>
       </div>
 
       <div class="route" id="route"><!-- day stations injected here --></div>
@@ -80,8 +102,29 @@
   <aside class="chat">
     <div class="chat__head">
       <h2 class="chat__title">The conversation</h2>
-      <button class="btn btn--ghost" id="resetBtn" title="Start a new trip">Start over</button>
+      <div class="chat__tools">
+        <button class="btn btn--ghost" id="quickBtn" aria-expanded="false" aria-controls="quickPanel" title="Build a trip with dropdowns">Quick plan</button>
+        <button class="btn btn--ghost" id="resetBtn" title="Start a new trip">Start over</button>
+      </div>
     </div>
+
+    <!-- Quick-plan: structured dropdowns that drive the real planner -->
+    <form class="quick" id="quickPanel" hidden>
+      <div class="quick__grid">
+        <label class="qf"><span>From</span><select id="qFrom"></select></label>
+        <label class="qf"><span>To</span><select id="qTo"></select></label>
+        <label class="qf"><span>When</span><input type="date" id="qDate" /></label>
+        <label class="qf"><span>Days</span><select id="qDays"></select></label>
+        <label class="qf"><span>Travellers</span><select id="qPax"></select></label>
+        <label class="qf"><span>Vibe</span><select id="qVibe"></select></label>
+        <label class="qf qf--wide"><span>Budget</span><select id="qBudget"></select></label>
+      </div>
+      <div class="quick__foot">
+        <span class="quick__hint" id="quickHint">Pick what you know — I'll plan the rest.</span>
+        <button class="btn btn--solid" id="quickGo" type="submit">Plan this trip</button>
+      </div>
+    </form>
+
     <div class="thread" id="thread" aria-live="polite"></div>
     <div class="composer">
       <div class="composer__meter" id="meter" title="LLM calls used this session"></div>
@@ -96,6 +139,7 @@
   </aside>
 
 </div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script src="app.js"></script>
 </body>
 </html>
