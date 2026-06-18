@@ -15,6 +15,9 @@ Routes
     POST /api/chat              {sid, message}  -> {reply, state}
     POST /api/reset             {sid}           -> fresh state
     POST /api/sample            {sid}           -> a seeded sample trip (needs sample_trip.py)
+    POST /api/brief             {sid, updates}  -> apply structured brief fields (no LLM)
+    POST /api/plan              {sid}           -> build the itinerary from the current brief
+    POST /api/action            {sid, intent}   -> a disruption: cancel / delay / change date / new trip
 """
 import json
 import argparse
@@ -23,6 +26,7 @@ from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 
 import agent
+import critic
 import storage
 import searcher
 import llm
@@ -140,6 +144,67 @@ class Handler(BaseHTTPRequestHandler):
             state = sample_state(sid)
             storage.save(state)
             return self._send(200, _serialize(state))
+
+        # Structured brief from the quick-plan dropdowns — deterministic, no LLM.
+        if parsed.path == "/api/brief":
+            updates = data.get("updates") or {}
+            if not isinstance(updates, dict):
+                return self._send(400, {"error": "updates must be an object"})
+            state = storage.load(sid)
+            try:
+                agent._apply_updates(state, updates)
+                storage.save(state)
+            except Exception as e:
+                return self._send(500, {"error": f"could not apply brief: {e}"})
+            payload = _serialize(state)
+            b = state.brief
+            payload["ready"] = bool(b.is_complete and b.destination)
+            return self._send(200, payload)
+
+        # Build the itinerary from whatever the brief currently holds.
+        if parsed.path == "/api/plan":
+            state = storage.load(sid)
+            b = state.brief
+            if not (b.is_complete and b.destination):
+                return self._send(400, {"error": "Set origin, travel date, duration and a destination city first."})
+            try:
+                it = agent._build_itinerary(b)
+                state.itinerary = it
+                issues = critic.validate(it)
+                msg = agent._summarize_plan(state, it, issues)
+                state.history.append({"role": "assistant", "content": msg})
+                storage.save(state)
+            except Exception as e:
+                return self._send(500, {"error": f"planning failed: {e}"})
+            return self._send(200, _serialize(state))
+
+        # Disruptions / change-management, routed straight to the real handler.
+        if parsed.path == "/api/action":
+            intent = (data.get("intent") or "").strip()
+            if intent not in ("cancel_flight", "delay_flight", "change_dates", "new_trip"):
+                return self._send(400, {"error": f"unknown action '{intent}'"})
+            state = storage.load(sid)
+            if intent == "delay_flight":
+                hours = int(data.get("hours") or 3)
+                user_msg, label = f"delay my flight {hours} hours", f"Delay flight by {hours}h"
+            elif intent == "change_dates":
+                date = (data.get("date") or "").strip()
+                if not date:
+                    return self._send(400, {"error": "a new date is required"})
+                user_msg, label = f"change the date to {date}", f"Change travel date to {date}"
+            elif intent == "cancel_flight":
+                user_msg, label = "my flight got cancelled", "Flight cancelled"
+            else:
+                user_msg, label = "plan a new trip", "Start a new trip"
+            state.history.append({"role": "user", "content": label})
+            try:
+                reply = agent._handle_change(state, intent, user_msg)
+                storage.save(state)
+            except Exception as e:
+                return self._send(500, {"error": f"action failed: {e}"})
+            payload = _serialize(state)
+            payload["reply"] = reply.model_dump()
+            return self._send(200, payload)
 
         self._send(404, {"error": "unknown route"})
 
