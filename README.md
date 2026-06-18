@@ -1,100 +1,149 @@
-# Agentic Travel Planning System (MVP)
+# Agentic Travel Planner
 
-An intelligent, interactive travel planning CLI agent built with Python, Pydantic, and Groq LLMs. The system performs natural language parameter extraction, ranks flights and hotels based on soft/hard constraints, builds chronological trip itineraries, and handles downstream travel disruptions through a reactive change-management patch engine.
+A chat-style travel planner for India. Tell it anything about your trip — even just *"I want to plan a trip"* — and it asks the right follow-up questions, suggests destinations that fit your vibe, plans the day-by-day itinerary, and handles disruptions (delays, cancellations) when you tell it about them.
 
----
+## What it does
 
-## 🌟 Key Features
+```
+USER  Bangalore to Kerala for 5 days with 3 people, no budget
+AGENT What kind of trip — adventure, religious, nature, party...?
 
-1. **AI Translation & Date Parsing (Phase 1)**:
-   - Extracts structured parameters from natural language inputs using Groq's `llama-3.3-70b-versatile` JSON mode.
-   - Automatically handles relative dates (e.g. *"July 15th"*) relative to a current date anchor.
-   - Gracefully falls back to mock programmatic rule-matchers if no API key is present.
+USER  nature
+AGENT Picks Munnar (2n) + Alleppey (2n) + Kochi (1n) for you.
+      Plans Day 1...5 with morning/afternoon/evening activities,
+      breakfast/lunch/dinner picks, inter-city transit.
+      Total ₹47,820 (mid-tier, per-room hotels, train inter-city).
 
-2. **Interactive Selection Loop (Phase 2)**:
-   - **Step 1 (Flight)**: Ranks flights based on user preferences (e.g., avoiding early morning departures) and guides the user to select their desired flight.
-   - **Step 2 (Hotel)**: Computes remaining budget headroom (`total_budget - chosen_flight_price`), filters out hotels exceeding this limit, and presents options sorted by rating descending.
-   - **Timeline Compilation**: Compiles selected items into a fully stitched chronological sequence.
-
-3. **Critic & Reactive Patch Engine (Phase 3)**:
-   - **Validation Scanner**: Runs deterministic checks to catch conflicts (e.g. flight arrival after check-in, hotel-flight location mismatches, and overall budget overrun).
-   - **Disruption Simulator**: Simulates flight leg cancellations, calculates the **blast radius** (what must be replaced vs. what must be preserved), searches budget-compliant alternatives, and re-anchors check-in/out times to the new flight times.
-
----
-
-## 📁 Repository Structure
-
-*   `main.py`: Entry point for the CLI pipeline (interactive or test-suite mode).
-*   `schemas.py`: Pydantic definitions for `TravelBrief`, `Flight`, `Hotel`, `ItineraryEvent`, and `FinalItinerary`.
-*   `extractor.py`: Handles structured natural language extraction using Groq LLM API.
-*   `router.py`: Implements route matching and the interactive flight/hotel selection logic.
-*   `searcher.py`: Performs parallel flight/hotel database searching and ranking.
-*   `critic.py`: Contains validation rules, blast radius logic, and re-anchoring functions.
-*   `test_pipeline.py`: Unit tests validating Pydantic models, safety scans, budget filtering, and patching.
-*   `data/db.json`: JSON data containing mock flight and hotel options.
-
----
-
-## ⚙️ Setup & Installation
-
-1.  **Clone the Repository**:
-    ```bash
-    git clone https://github.com/swarnika-cmd/TravelAgent.git
-    cd TravelAgent
-    ```
-
-2.  **Install Dependencies**:
-    The project uses standard python libraries along with Pydantic and Groq client.
-    ```bash
-    pip install pydantic groq python-dotenv
-    ```
-
-3.  **Configure API Key**:
-    Create a `.env` file in the root directory and add your Groq API key:
-    ```env
-    GROQ_API_KEY=your-actual-groq-api-key-here
-    ```
-    *Note: If no key is set, the system prints a warning and falls back to mock programmatic extraction & ranking so the app can still be tested.*
-
----
-
-## 🚀 Running the CLI
-
-Launch the interactive travel planner:
-```bash
-python main.py
+USER  my flight got cancelled
+AGENT Re-books the next-cheapest flight and re-anchors all check-ins.
 ```
 
-*   **Interactive Input**: Type in custom travel requests (e.g., *"I want to fly from Mumbai to London on July 15th for 6 days under 150000 INR"*).
-*   **Run Defaults**: Press **Enter** on an empty prompt to execute the default mock test cases.
+## Architecture
 
----
+No model training, no heavy backend. A small Python state machine around three free services:
 
-## 🔬 Running Tests
+1. **Google Gemini** — language understanding, destination suggestion, and on-demand generation of activities / restaurants / hotels / transit for any Indian city.
+   Fallback chain: `gemini-3.1-flash-lite` → `gemini-2.5-flash-lite` → `gemini-2.5-flash`. Auto-walks the chain on 503 / overload.
+2. **Sky-Scrapper (RapidAPI)** — live flight + hotel prices. Mocks gracefully when the key is missing or quota is gone.
+3. **Sentence-transformers + FAISS** — local semantic retrieval over the Kaggle Indian Travel Survey for the "people like you" personalization. Falls back to 5 hand-written personas if you haven't built the index.
 
-A comprehensive unit test suite is included to verify the validation rules, budget filtering, and change-management patch logic. 
+## Files
 
-Run the tests using standard library `unittest`:
-```bash
-python -m unittest test_pipeline.py
+```
+app.py              Streamlit chat UI (single file)
+agent.py            Conversation orchestrator — one respond() function
+schemas.py          Pydantic models
+llm.py              All Gemini calls (extract, suggest, generate)
+searcher.py         Sky-Scrapper client (live + mock)
+itinerary.py        Day-by-day plan assembly
+critic.py           Conflict detector (chronology, budget, tight gaps)
+personalization.py  RAG retriever + index builder
+storage.py          Per-session JSON persistence + LLM rate limiter
+requirements.txt    Python deps
 ```
 
----
+Runtime artifacts in `data/cache/`, `data/sessions/`, `data/raw/` are gitignored.
 
-## 🛠️ Testing the Phase 3 Disruption Simulation
+## Setup
 
-You can test the change-management flight-cancellation recovery flow directly in the CLI:
+```bash
+pip install -r requirements.txt
+```
 
-1.  Start the CLI with `python main.py`.
-2.  Press **Enter** to run the default test suite.
-3.  Select Flight `1` (British Airways FL-002, 75,000 INR).
-4.  Select Hotel `1` (London Cozy Stay, 60,000 INR).
-5.  At the prompt:
-    `Would you like to simulate a flight cancellation to test Phase 3 Change Management? (y/n) [default: n]: `
-    Type **`y`** and press **Enter**.
-6.  Observe the printed **Blast Radius Analysis**:
-    - Discards flight `FL-002`.
-    - Preserves hotel stay `HT-001` (cost 60,000 INR).
-    - Recalculates remaining budget: `150,000 - 60,000 = 90,000 INR`.
-7.  Select the replacement flight (Air India `FL-001`, 60,000 INR).
-8.  Verify the final **Patched Chronological Itinerary** prints cleanly with re-anchored timelines.
+Create `.env`:
+
+```
+GEMINI_API_KEY=AIzaSy...                           # https://aistudio.google.com/apikey
+RAPIDAPI_KEY=your_rapidapi_key                     # https://rapidapi.com  (optional)
+RAPIDAPI_HOST=sky-scrapper.p.rapidapi.com
+```
+
+Optional — override the Gemini model chain:
+
+```
+GEMINI_MODEL=gemini-3.1-flash-lite,gemini-2.5-flash-lite,gemini-2.5-flash
+```
+
+Without a RapidAPI key, flights/hotels come from mocks (the LLM still generates city-realistic hotel options). Everything else still works.
+
+## Run
+
+```bash
+streamlit run app.py
+```
+
+Opens at http://localhost:8501.
+
+Try these:
+
+- *"Bangalore to Mysore for 3 days with 3 people, cheapest possible"*
+- *"I want a 5-day adventure trip from Delhi, no budget"*
+- *"Couple from Mumbai going to Kerala in August, 7 days, ₹80000"*
+- *"Plan a religious trip from Chennai for 4 days under 25k"*
+
+## How the chat flow works
+
+1. Agent asks for whatever's missing — **one thing at a time** (origin / dates / duration / budget / vibe).
+2. If you give a state ("Kerala", "Rajasthan"), it picks **multiple cities** in that state matched to the vibe and distributes nights sensibly.
+3. If you only give a vibe (no destination), it **suggests 3 specific cities**; "I've been to X" or "show me more" excludes them.
+4. Once every required field is filled, it plans and shows the full itinerary.
+5. After the plan exists, type something like *"my flight got cancelled"* / *"delay 3 hours"* / *"change to 2026-08-15"* and the agent re-plans the affected leg.
+
+## How the cost is calculated
+
+Realistic, not naive:
+
+- **Flight** — only if the LLM says flight is the right mode for the route distance. Otherwise ground transit (train/bus/cab) is inserted on Day 1. Flight cost × travellers.
+- **Hotels** — per **room**, not per person. 1-3 people = 1 room, 4-6 = 2 rooms, etc.
+- **Activities + meals** — per person.
+- **Inter-city transit** — train under ~600 km, flight over ~1200 km, cab/bus in between.
+- **Budget mode** controls hotel pick: `cap` = best-rated within budget; `cheapest` = cheapest available; `any` = mid-tier (not max luxury); `none` = agent asks first.
+
+## Personalization (RAG)
+
+Each plan includes the top 3 "similar travelers" retrieved from a survey corpus. Without the dataset, you get 5 representative personas. To use real data:
+
+1. Drop `travel_survey.csv` from the Kaggle Indian Travel Survey at `data/raw/travel_survey.csv`.
+2. Build the index once:
+   ```bash
+   python personalization.py build
+   ```
+3. Run as normal — embeddings live in `data/cache/rag/`.
+
+## Per-session rate limit
+
+Each chat is capped at **80 LLM calls** (configurable in `storage.py`). The sidebar shows usage. "Clear chat & start over" resets the counter and the saved JSON.
+
+## Assignment coverage
+
+| Requirement | Where |
+|---|---|
+| Travel Brief Intake | `llm.extract_updates` runs every turn |
+| Agentic Search | `searcher` (live + mock) + `llm.generate_*` for unknown cities |
+| Itinerary Assembly | `itinerary.build` — day-by-day, multi-city, transit-aware |
+| Conflict Resolution | `critic.validate` — chronology, budget, tight gaps |
+| Change Management | `agent._handle_change` — cancel / delay / dates / new trip |
+| Traveller Dashboard | `app.py` — chat + sidebar + bookings tab + day-plan tab |
+
+## Project layout map
+
+```
+.
+├── app.py              # entry
+├── agent.py            # orchestrator
+├── schemas.py          # types
+├── llm.py              # Gemini wrapper
+├── searcher.py         # Sky-Scrapper
+├── itinerary.py        # day builder
+├── critic.py           # validator
+├── personalization.py  # RAG
+├── storage.py          # session + rate limit
+├── requirements.txt
+├── README.md
+├── .env                # local secrets (gitignored)
+├── .gitignore
+└── data/
+    ├── cache/          # LLM + API caches (gitignored)
+    ├── sessions/       # per-user chat JSONs (gitignored)
+    └── raw/            # optional Kaggle CSVs (gitignored)
+```
