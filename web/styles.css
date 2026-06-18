@@ -380,4 +380,85 @@ h1, h2, h3 { margin: 0; font-family: var(--display); font-weight: 800; letter-sp
   .board__grid { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 6px; }
   .flapgroup--status { margin-left: 0; }
   .hero { padding-top: 40px; }
+  .plan__side { width: 100%; }
+  .menu__pop { right: auto; left: 0; }
+}
+
+/* ====== Extras: quick-plan, trip actions, share/print, toast ============== */
+
+/* `hidden` must win over the display rules below (e.g. .menu__pop) */
+[hidden] { display: none !important; }
+
+.chat__tools { display: flex; gap: 8px; }
+
+/* Native control reset so selects/date inputs match the design */
+.quick select, .quick input, .menu__pop select, .menu__pop input {
+  font-family: var(--body); font-size: 13.5px; color: var(--text);
+  background: var(--paper); border: 1px solid var(--rule); border-radius: 9px;
+  padding: 8px 10px; outline: none; transition: border-color .15s, box-shadow .15s;
+}
+.quick select:focus, .quick input:focus, .menu__pop select:focus, .menu__pop input:focus {
+  border-color: var(--marigold); box-shadow: 0 0 0 3px rgba(242,169,59,.2);
+}
+
+/* Quick-plan panel */
+.quick { border-bottom: 1px solid var(--rule); padding: 16px 22px 18px; background: var(--paper); }
+.quick__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; }
+.qf { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.qf--wide { grid-column: 1 / -1; }
+.qf > span { font-family: var(--mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.qf select, .qf input { width: 100%; }
+.quick__foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; }
+.quick__hint { font-size: 12.5px; color: var(--muted); line-height: 1.4; }
+.quick__hint.warn { color: var(--marigold-d); }
+
+/* Plan top-line side column + actions */
+.plan__side { display: flex; flex-direction: column; align-items: flex-end; gap: 12px; }
+.plan__actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* Dropdown menu (trip actions) */
+.menu { position: relative; }
+.menu__pop {
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 30; width: 290px;
+  background: var(--paper-2); border: 1px solid var(--rule); border-radius: var(--r-md);
+  box-shadow: 0 18px 40px -18px rgba(15,24,48,.5); padding: 8px; display: flex; flex-direction: column; gap: 4px;
+}
+.menu__item {
+  text-align: left; font-family: var(--body); font-size: 13.5px; color: var(--text);
+  background: transparent; border: 0; border-radius: 8px; padding: 10px 11px; cursor: pointer;
+}
+.menu__item:hover { background: var(--paper); color: var(--ink); }
+.menu__line { display: flex; align-items: center; gap: 8px; padding: 4px 3px; }
+.menu__line span { font-size: 13px; color: var(--ink-soft); white-space: nowrap; }
+.menu__line select, .menu__line input { flex: 1; min-width: 0; }
+.menu__go {
+  font-family: var(--body); font-size: 12.5px; font-weight: 600; cursor: pointer;
+  background: var(--ink); color: var(--paper); border: 0; border-radius: 8px; padding: 8px 12px; white-space: nowrap;
+}
+.menu__go:hover { background: var(--ink-2); }
+
+/* Toast */
+.toast {
+  position: fixed; left: 50%; bottom: 26px; transform: translate(-50%, 16px);
+  background: var(--ink); color: var(--paper); font-size: 13.5px; font-weight: 500;
+  padding: 11px 18px; border-radius: 100px; box-shadow: 0 16px 36px -16px rgba(15,24,48,.7);
+  opacity: 0; pointer-events: none; transition: opacity .2s ease, transform .2s ease; z-index: 50;
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+.toast::before { content: "✓ "; color: var(--marigold); }
+
+@media (max-width: 920px) { .quick__grid { grid-template-columns: 1fr; } }
+
+/* ====== Print: a clean paper itinerary ==================================== */
+@media print {
+  .chat, .topbar, .hero, .board__lamp, .plan__actions, .composer { display: none !important; }
+  .app { display: block; }
+  .canvas { padding: 0; }
+  .board { background: #fff; color: var(--ink); box-shadow: none; border: 1px solid #bbb; }
+  .board__sub, .flapgroup__label { color: #555; }
+  .flap { background: #fff; color: var(--ink); border: 1px solid #999; }
+  .flap::after { display: none; }
+  .day, .ticket, .kincard { break-inside: avoid; }
+  .day__card, .ticket, .kincard { box-shadow: none; }
+  body { background: #fff; }
 }

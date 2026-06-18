@@ -109,6 +109,21 @@ No Gemini key yet? Click **Explore a sample trip** (or `POST /api/sample`) to
 load a complete Bangalore → Kerala itinerary and tour the whole interface
 offline. Add `GEMINI_API_KEY` to chat live.
 
+### Quick plan, trip actions & more
+
+Beyond the chat, a few structured controls drive the **real** planner directly
+(no LLM needed for the mechanics — they call `agent._apply_updates`,
+`_build_itinerary` and `_handle_change`):
+
+- **Quick plan** — dropdowns for origin, destination, date, days, travellers,
+  vibe and budget. Pick a destination and it builds the itinerary on the spot;
+  leave it on *"Let AI suggest"* to hand off to the chat (needs a key).
+- **Trip actions** — once a plan exists: rebook a cancelled flight, delay it by
+  2/3/6h, change the travel date, or start over. Each re-anchors the itinerary.
+- **Share** — copies a `?sid=` link to the exact trip. **Print** — a print
+  stylesheet lays the itinerary out cleanly for paper or PDF.
+- `?quick=1` opens the quick-plan panel on load; `?sid=…` opens a shared trip.
+
 | Route | Does |
 |---|---|
 | `GET /` | the app (`web/index.html`) |
@@ -116,6 +131,9 @@ offline. Add `GEMINI_API_KEY` to chat live.
 | `POST /api/chat` | `{sid, message}` → agent reply + new state |
 | `POST /api/reset` | clear the session |
 | `POST /api/sample` | seed a ready-made sample trip (needs `sample_trip.py`) |
+| `POST /api/brief` | `{sid, updates}` → apply structured brief fields (no LLM) |
+| `POST /api/plan` | build the itinerary from the current brief |
+| `POST /api/action` | a disruption: `cancel_flight` / `delay_flight` / `change_dates` / `new_trip` |
 
 ## How the chat flow works
 
