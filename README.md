@@ -1,4 +1,12 @@
-# Agentic Travel Planner
+<h1 align="center">Agentic Travel Planner</h1>
+
+<p align="center">
+  <img
+    width="900"
+    alt="Agentic Travel Planner"
+    src="https://github.com/user-attachments/assets/6e36fd78-70c2-4c9c-b401-f3c6ccb919b4"
+  />
+</p>
 
 A chat-style travel planner for India. Tell it anything about your trip — even just *"I want to plan a trip"* — and it asks the right follow-up questions, suggests destinations that fit your vibe, plans the day-by-day itinerary, and handles disruptions (delays, cancellations) when you tell it about them.
 
