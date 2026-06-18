@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Safar — plan India by conversation</title>
+<meta name="description" content="An agentic travel planner for India. Chat your trip into being and watch it land on the board." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=Inter:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="styles.css" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2316203A'/%3E%3Ccircle cx='16' cy='16' r='5' fill='none' stroke='%23F2A93B' stroke-width='2.5'/%3E%3Ccircle cx='16' cy='16' r='1.6' fill='%23F2A93B'/%3E%3C/svg%3E" />
+</head>
+<body data-state="empty">
+<div class="app">
+
+  <!-- ===== Canvas: the journey ===== -->
+  <main class="canvas" id="canvas">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand__mark" aria-hidden="true"></span>
+        <span class="brand__word">SAFAR</span>
+        <span class="brand__tag">plan India by conversation</span>
+      </div>
+      <div class="topbar__flags" id="flags"></div>
+    </header>
+
+    <!-- Departure board (the signature) -->
+    <section class="board" aria-label="Trip summary board">
+      <div class="board__head">
+        <span class="board__lamp" aria-hidden="true"></span>
+        <span class="board__title">DEPARTURES</span>
+        <span class="board__sub" id="boardSub">awaiting your trip</span>
+      </div>
+      <div class="board__grid" id="board">
+        <div class="flapgroup" data-field="from"><span class="flapgroup__label">From</span><div class="flaps" data-cells="3" data-pad="•"></div></div>
+        <div class="flapgroup flapgroup--arrow" aria-hidden="true"><span class="flapgroup__label">&nbsp;</span><div class="arrowline">▸</div></div>
+        <div class="flapgroup flapgroup--to" data-field="to"><span class="flapgroup__label">To</span><div class="flaps" data-cells="10" data-pad="•"></div></div>
+        <div class="flapgroup" data-field="days"><span class="flapgroup__label">Days</span><div class="flaps" data-cells="2" data-pad="-"></div></div>
+        <div class="flapgroup" data-field="date"><span class="flapgroup__label">When</span><div class="flaps" data-cells="6" data-pad="-"></div></div>
+        <div class="flapgroup" data-field="pax"><span class="flapgroup__label">Pax</span><div class="flaps" data-cells="2" data-pad="-"></div></div>
+        <div class="flapgroup flapgroup--status" data-field="status"><span class="flapgroup__label">Status</span><div class="flaps" data-cells="8" data-pad=" "></div></div>
+      </div>
+    </section>
+
+    <!-- Empty hero -->
+    <section class="hero" id="hero">
+      <p class="hero__eyebrow">No itinerary yet</p>
+      <h1 class="hero__line">Tell me where you're going.<br>I'll lay the whole journey on the board.</h1>
+      <p class="hero__body">A 5-day nature run through Kerala, a heritage loop in Rajasthan, a temple trail from Delhi — describe it however it lives in your head. I ask what I still need, suggest places that fit, then plan it day by day.</p>
+      <button class="btn btn--solid" id="sampleBtn">Explore a sample trip</button>
+    </section>
+
+    <!-- Itinerary (filled when a plan exists) -->
+    <section class="plan" id="plan" hidden>
+      <div class="plan__topline">
+        <div class="plan__total">
+          <span class="plan__total-label">Estimated total</span>
+          <span class="plan__total-figure" id="planTotal">—</span>
+          <span class="plan__total-note" id="planTotalNote"></span>
+        </div>
+        <div class="plan__legs" id="planLegs"></div>
+      </div>
+
+      <div class="route" id="route"><!-- day stations injected here --></div>
+
+      <div class="bookings">
+        <h2 class="sect">Tickets &amp; stays</h2>
+        <div class="bookings__grid" id="bookings"></div>
+      </div>
+
+      <div class="kin" id="kinWrap" hidden>
+        <h2 class="sect">Travellers like you chose</h2>
+        <div class="kin__grid" id="kin"></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ===== Chat: the conversation ===== -->
+  <aside class="chat">
+    <div class="chat__head">
+      <h2 class="chat__title">The conversation</h2>
+      <button class="btn btn--ghost" id="resetBtn" title="Start a new trip">Start over</button>
+    </div>
+    <div class="thread" id="thread" aria-live="polite"></div>
+    <div class="composer">
+      <div class="composer__meter" id="meter" title="LLM calls used this session"></div>
+      <form id="form" class="composer__form" autocomplete="off">
+        <input id="input" class="composer__input" type="text"
+               placeholder="e.g. Mumbai to Goa for 4 days, 2 of us…" aria-label="Message the planner" />
+        <button class="composer__send" id="send" type="submit" aria-label="Send">
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 12l15-7-5 7 5 7-15-7z" fill="currentColor"/></svg>
+        </button>
+      </form>
+    </div>
+  </aside>
+
+</div>
+<script src="app.js"></script>
+</body>
+</html>
