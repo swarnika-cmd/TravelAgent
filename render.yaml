@@ -1,0 +1,30 @@
+services:
+  # 1. Custom Safar Web UI Service
+  - type: web
+    name: travel-agent-safar
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python server.py --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false # User will be prompted to enter this in Render Dashboard
+      - key: RAPIDAPI_KEY
+        sync: false # Optional
+        value: ""
+      - key: RAPIDAPI_HOST
+        value: "sky-scrapper.p.rapidapi.com"
+
+  # 2. Streamlit Dashboard Service
+  - type: web
+    name: travel-agent-streamlit
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: streamlit run app.py --server.port $PORT --server.address 0.0.0.0
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false # User will be prompted to enter this in Render Dashboard
+      - key: RAPIDAPI_KEY
+        sync: false # Optional
+        value: ""
+      - key: RAPIDAPI_HOST
+        value: "sky-scrapper.p.rapidapi.com"

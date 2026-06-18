@@ -26,7 +26,7 @@ USER  my flight got cancelled
 AGENT Re-books the next-cheapest flight and re-anchors all check-ins.
 ```
 
-## Architecture
+## Architecture & Flow Diagram
 
 No model training, no heavy backend. A small Python state machine around three free services:
 
@@ -34,6 +34,50 @@ No model training, no heavy backend. A small Python state machine around three f
    Fallback chain: `gemini-3.1-flash-lite` → `gemini-2.5-flash-lite` → `gemini-2.5-flash`. Auto-walks the chain on 503 / overload.
 2. **Sky-Scrapper (RapidAPI)** — live flight + hotel prices. Mocks gracefully when the key is missing or quota is gone.
 3. **Sentence-transformers + FAISS** — local semantic retrieval over the Kaggle Indian Travel Survey for the "people like you" personalization. Falls back to 5 hand-written personas if you haven't built the index.
+
+### Workflow Architecture
+The workflow below details how the chat flow, LLM extraction, database matching, and itinerary generation fit together:
+
+```mermaid
+graph TD
+    User([User / UI]) -->|1. Chat message| Agent[agent.py: respond]
+    Agent -->|2. Extract updates / intent| LLM_Extract[llm.py: extract_updates]
+    LLM_Extract -->|Gemini API| Gemini[Google Gemini API]
+    
+    Agent -->|3. Check rate limit & sessions| Storage[(storage.py: sessions/)]
+    
+    subgraph Conversation Loop
+        Agent -->|4. If missing details| AskField[Ask next: origin/dates/duration/budget/vibe]
+        Agent -->|5. If vibe selected| LLM_Suggest[llm.py: suggest_destinations]
+        LLM_Suggest -->|Gemini API| Gemini
+        Agent -->|6. Ask to pick destination| Suggestions[Suggest 3 cities]
+    end
+    
+    Agent -->|7. If all details present| Assembly[itinerary.py: build]
+    Assembly -->|Search flights/hotels| Searcher[searcher.py: Sky-Scrapper client]
+    Searcher -->|Live API / Mock| LiveAPI[Sky-Scrapper RapidAPI / Mock data]
+    Assembly -->|Generate activities/meals/transit| LLM_Gen[llm.py: generate_activities / generate_restaurants / generate_transit]
+    LLM_Gen -->|Gemini API| Gemini
+    Assembly -->|Retrieve similar travelers| RAG[personalization.py: RAG]
+    RAG -->|Local vector search| FAISS[(FAISS Index / Fallback personas)]
+    
+    Assembly -->|8. Itinerary built| Critic[critic.py: validate]
+    Critic -->|Validate budget / timeline| Report[Itinerary + warnings]
+    
+    Agent -->|9. Disruption intent detected| ChangeMgmt[agent.py: _handle_change]
+    ChangeMgmt -->|Re-book flights & re-anchor hotels| Assembly
+```
+
+### Detailed Working Flow
+1. **Intake and Extraction (`agent.py` & `llm.py`)**: Every incoming message is checked for rate-limits and processed via `llm.extract_updates` to identify travel parameters (origin, destinations, dates, duration, budget, vibe) or specific operational commands (cancellations, delays).
+2. **Turn-by-Turn Completion**: The agent ensures all parameters are completed sequentially. If a destination state is specified (e.g., "Kerala"), it splits it into a sensible multi-city tour. If only a vibe is selected, it recommends three candidate cities.
+3. **Itinerary Assembly (`itinerary.py`)**:
+   - **Flights/Hotels**: The agent queries `searcher.py` using Sky-Scrapper to source flights and hotels, using realistic mock data as a graceful fallback.
+   - **Local Activities & Diners**: Sourced on-the-fly and cached locally via LLM modules (`generate_activities` and `generate_restaurants`).
+   - **Inter-City Ground Transit**: Mode, duration, and price estimations are generated for closer destinations.
+4. **Personalization Retriever (`personalization.py`)**: Performs vector-search queries (using Sentence-Transformers & FAISS) over a local index built from the Kaggle Indian Travel Survey to append "similar traveler profiles" to the trip plan.
+5. **Conflict Critic (`critic.py`)**: Automatically scans the assembled timeline for over-budget plans, scheduling order errors, or tight transitions.
+6. **Change Management**: Detects instructions like "flight cancelled" or "delayed by X hours" to dynamically swap flights and re-anchor check-ins and downstream events.
 
 ## Files
 
@@ -177,7 +221,35 @@ Each chat is capped at **80 LLM calls** (configurable in `storage.py`). The side
 | Itinerary Assembly | `itinerary.build` — day-by-day, multi-city, transit-aware |
 | Conflict Resolution | `critic.validate` — chronology, budget, tight gaps |
 | Change Management | `agent._handle_change` — cancel / delay / dates / new trip |
-| Traveller Dashboard | `app.py` (Streamlit) **and** `server.py` + `web/` (Safar web UI) |
+| Traveller Dashboard | `app.py` (Streamlit) **and** `server.py` + `web/` (Safar web UI) |## Deployment
+
+### 1. Streamlit Dashboard App (`app.py`)
+Streamlit apps are highly portable and can be deployed easily on the cloud:
+* **Streamlit Community Cloud (Free & Recommended)**:
+  1. Push the code to a GitHub repository.
+  2. Log into [share.streamlit.io](https://share.streamlit.io/).
+  3. Click **New App**, select your repo, branch (`main`), and set the main file path to `app.py`.
+  4. Under **Settings -> Secrets**, paste your `.env` variables (e.g., `GEMINI_API_KEY`, and optional `RAPIDAPI_KEY` / `RAPIDAPI_HOST`).
+* **Hugging Face Spaces or Render**:
+  * You can create a Docker container running streamlit, exposing port `8501`, and run:
+    ```bash
+    streamlit run app.py --server.port 8501 --server.address 0.0.0.0
+    ```
+
+### 2. Custom "Safar" Web UI (`server.py` + `web/`)
+Because Safar uses a lightweight zero-dependency stdlib server, it is extremely easy to host on platform-as-a-service providers like **Render**, **Railway**, or **Heroku**:
+* **Render Web Service (Recommended)**:
+  1. Create a new **Web Service** linked to your GitHub repository.
+  2. Set the Environment to **Python**.
+  3. **Build Command**: `pip install -r requirements.txt`
+  4. **Start Command**: `python server.py --host 0.0.0.0 --port $PORT` (Render dynamically assigns a port via the `$PORT` environment variable).
+  5. Add your `GEMINI_API_KEY` to the service's Environment Variables.
+* **VPS Deployment (Ubuntu / Nginx)**:
+  1. Set up a systemd service to run:
+     ```bash
+     python server.py --host 127.0.0.1 --port 8000
+     ```
+  2. Reverse-proxy port `8000` using Nginx to handle SSL and domain routing.
 
 ## Project layout map
 
