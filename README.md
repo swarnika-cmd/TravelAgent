@@ -24,6 +24,14 @@ plans the journey day by day, and re-plans on the fly when a flight slips.
 [![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?style=flat&logo=streamlit&logoColor=white)](https://streamlit.io)
 [![FAISS](https://img.shields.io/badge/FAISS%20RAG-00ADD8?style=flat)](https://github.com/facebookresearch/faiss)
 
+---
+
+🚀 **Live Deployment Links**
+### 🌐 **Primary Web UI (Safar)**: [travel-agent-safar.onrender.com](https://travel-agent-safar.onrender.com/)
+### 📊 **Streamlit Admin Dashboard**: [travel-agent-streamlit.onrender.com](https://travel-agent-streamlit.onrender.com/)
+
+---
+
 </div>
 
 <br>
@@ -183,6 +191,11 @@ flowchart LR
 
 A tiny stdlib server wrapping the same agent the Streamlit app uses.
 
+<br>
+
+<details>
+<summary>🛠️ <b>Explore HTTP API Endpoints</b></summary>
+
 | Route | Method | Does |
 |---|---|---|
 | `/api/state` | `GET` | Current state + runtime flags |
@@ -193,8 +206,11 @@ A tiny stdlib server wrapping the same agent the Streamlit app uses.
 | `/api/plan` | `POST` | Build the itinerary |
 | `/api/action` | `POST` | A disruption — cancel · delay · re-date · new |
 
+<br>
+
 > `brief`, `plan` and `action` call the real agent internals, so the dropdowns
 > and trip actions plan for real — even with no Gemini key.
+</details>
 
 ---
 
@@ -223,7 +239,31 @@ python personalization.py build
 
 ---
 
+## Cloud Deployment (Render)
+
+The project includes a `render.yaml` Blueprint file, which enables 1-click free hosting on Render:
+
+1. Log in to the [Render Dashboard](https://dashboard.render.com/).
+2. Click **New +** in the top right, and select **Blueprint**.
+3. Link your GitHub repository (`swarnika-cmd/TravelAgent`).
+4. Render will automatically parse the `render.yaml` file and set up **both** services:
+   * **`travel-agent-safar`** (The primary Web UI)
+   * **`travel-agent-streamlit`** (The Streamlit Dashboard)
+5. Fill in the required environment variables:
+   * `GEMINI_API_KEY`: Your Google Gemini API Key.
+   * `RAPIDAPI_KEY` (Optional): Set to your Sky-Scrapper RapidAPI key, or leave blank to use mock flight/hotel prices.
+6. Click **Deploy**. Both services will boot up on the **Free tier** automatically with no credit card or payment required!
+
+<br>
+
+---
+
+<br>
+
 ## Project structure
+
+<details>
+<summary>📂 <b>View Codebase Architecture & Files</b></summary>
 
 ```
 app.py              Streamlit chat UI
@@ -240,13 +280,16 @@ critic.py           Conflict detector
 personalization.py  FAISS RAG
 storage.py          Sessions + rate limit
 ```
+</details>
 
 ---
 
 ## Try it
 
-Start with any of these:
+<details open>
+<summary>💬 <b>Example Prompts to Paste in Chat</b></summary>
 
+Start with any of these:
 ```
 Bangalore to Mysore for 3 days with 3 people, cheapest possible
 I want a 5-day adventure trip from Delhi, no budget
@@ -254,11 +297,17 @@ Couple from Mumbai going to Kerala in August, 7 days, ₹80000
 Plan a religious trip from Chennai for 4 days under 25k
 ```
 
-Once a plan exists, try disrupting it:
+</details>
 
+<details open>
+<summary>🛠️ <b>Simulate Travel Disruptions</b></summary>
+
+Once a plan exists, try disrupting it:
 ```
 my flight got cancelled   ·   delay 3 hours   ·   change to 2026-08-15
 ```
+
+</details>
 
 ---
 
@@ -272,6 +321,9 @@ my flight got cancelled   ·   delay 3 hours   ·   change to 2026-08-15
 Safar includes a comprehensive failure-focused test suite that validates the planner's behavior under edge cases and service failures.
 
 The tests use Python's built-in `unittest` framework, so no additional testing dependencies are required.
+
+<details>
+<summary>🧪 <b>Expand Test Suite Documentation & Commands</b></summary>
 
 ### Install dependencies
 
@@ -312,4 +364,5 @@ The suite mocks external services (`llm`, `storage`, `searcher`, etc.) and verif
 * External APIs are mocked and are **not called** during testing.
 * The suite can be executed without a Gemini API key.
 * Tests focus on resilience, validation, and recovery behavior rather than itinerary quality.
+</details>
 
