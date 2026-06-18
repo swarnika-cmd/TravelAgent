@@ -242,8 +242,9 @@
 
   // ----- apply a full payload -----
   let lastFlags = { llm_live:false, search_live:false, llm_calls_max:80 };
+  let lastState = null;
   function apply(payload, suggestions) {
-    const state = payload.state; lastFlags = payload.flags || lastFlags;
+    const state = payload.state; lastFlags = payload.flags || lastFlags; lastState = state;
     renderFlags(lastFlags);
     renderBoard(state);
     renderPlan(state);
@@ -280,9 +281,109 @@
     } finally { setBusy(false); $("#input").focus(); }
   }
 
+  // ----- toast -----
+  let toastT;
+  function toast(msg) {
+    const t = $("#toast"); t.textContent = msg; t.classList.add("show");
+    clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("show"), 2400);
+  }
+
+  // ----- quick-plan dropdowns -----
+  const CITIES = ["Bangalore","Mumbai","Delhi","Chennai","Kolkata","Hyderabad","Pune","Ahmedabad","Jaipur","Kochi","Lucknow","Chandigarh","Goa"];
+  const DESTS  = ["Goa","Manali","Munnar","Udaipur","Jaipur","Rishikesh","Varanasi","Darjeeling","Coorg","Pondicherry","Andaman","Shimla","Hampi","Amritsar"];
+  const VIBES  = ["nature","adventure","heritage","religious","party","food","honeymoon","family","relaxation"];
+  const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+  const opt = (v, label, sel) => { const o = document.createElement("option"); o.value = v; o.textContent = label ?? v; if (sel) o.selected = true; return o; };
+
+  function fillSelects() {
+    const f = $("#qFrom"); CITIES.forEach(c => f.appendChild(opt(c, c, c === "Bangalore")));
+    const t = $("#qTo"); t.appendChild(opt("", "✦ Let AI suggest")); DESTS.forEach(c => t.appendChild(opt(c)));
+    const d = $("#qDays"); for (let i = 2; i <= 12; i++) d.appendChild(opt(i, i + " days", i === 5));
+    const p = $("#qPax"); for (let i = 1; i <= 8; i++) p.appendChild(opt(i, i + (i > 1 ? " travellers" : " traveller"), i === 2));
+    const v = $("#qVibe"); VIBES.forEach(x => v.appendChild(opt(x, cap(x), x === "nature")));
+    const b = $("#qBudget");
+    [["any","No budget cap"],["cheapest","Cheapest possible"],["25000","Around ₹25,000"],["50000","Around ₹50,000"],["75000","Around ₹75,000"],["100000","Around ₹1,00,000"]]
+      .forEach(([val, lab], i) => b.appendChild(opt(val, lab, i === 0)));
+    // sensible default date ~2 weeks out
+    const dt = new Date(); dt.setDate(dt.getDate() + 14);
+    $("#qDate").value = dt.toISOString().slice(0, 10);
+    $("#qDate").min = new Date().toISOString().slice(0, 10);
+  }
+
+  const setHint = (msg, warn) => { const h = $("#quickHint"); h.textContent = msg; h.classList.toggle("warn", !!warn); };
+  function closeQuick() { $("#quickPanel").hidden = true; $("#quickBtn").setAttribute("aria-expanded", "false"); }
+  function toggleQuick() {
+    const p = $("#quickPanel"), open = p.hidden;
+    p.hidden = !open; $("#quickBtn").setAttribute("aria-expanded", String(open));
+    if (open && lastState && lastState.brief && lastState.brief.origin) {
+      const fr = lastState.brief.origin;
+      if (CITIES.includes(fr)) $("#qFrom").value = fr;
+    }
+  }
+  const budgetText = b => b === "any" ? "no budget cap" : b === "cheapest" ? "as cheap as possible" : `budget around ₹${(+b).toLocaleString("en-IN")}`;
+
+  async function quickPlan() {
+    if (busy) return;
+    const from = $("#qFrom").value, to = $("#qTo").value, date = $("#qDate").value;
+    const days = +$("#qDays").value, pax = +$("#qPax").value, vibe = $("#qVibe").value, budget = $("#qBudget").value;
+    if (!date) { setHint("Pick a travel date to continue.", true); return; }
+    const updates = { origin: from, travel_date: date, duration_days: days, traveller_count: pax, vibe };
+    if (budget === "any" || budget === "cheapest") updates.budget_mode = budget;
+    else { updates.budget_max_inr = +budget; updates.budget_mode = "cap"; }
+    if (to) updates.destinations = [{ city: to, nights: days }];
+
+    setBusy(true); setHint("Working on it…");
+    try {
+      apply(await api("/api/brief", { updates }), []);           // fills the board (deterministic)
+      if (to) {
+        apply(await api("/api/plan", {}), []);                   // real planner
+        closeQuick(); toast("Trip planned");
+      } else if (lastFlags.llm_live) {
+        closeQuick();
+        await send(`Plan a ${vibe} trip from ${from} for ${days} days for ${pax} ${pax > 1 ? "people" : "person"}, ${budgetText(budget)}.`);
+      } else {
+        setHint("Pick a destination above — AI suggestions need a Gemini key.", true);
+      }
+    } catch (e) {
+      setHint("Couldn't plan: " + e.message, true);
+    } finally { setBusy(false); }
+  }
+
+  // ----- trip actions menu -----
+  function closeTrip() { const p = $("#tripPop"); if (p) { p.hidden = true; $("#tripBtn").setAttribute("aria-expanded", "false"); } }
+  function toggleTrip() {
+    const p = $("#tripPop"), open = p.hidden;
+    p.hidden = !open; $("#tripBtn").setAttribute("aria-expanded", String(open));
+    if (open && lastState && lastState.brief) $("#newDate").value = lastState.brief.travel_date || "";
+  }
+  async function tripAction(intent) {
+    if (busy) return;
+    const body = { intent };
+    if (intent === "delay_flight") body.hours = +$("#delayHrs").value;
+    if (intent === "change_dates") {
+      body.date = $("#newDate").value;
+      if (!body.date) { toast("Pick a date first"); return; }
+    }
+    if (intent === "new_trip" && !confirm("Start a brand-new trip? This clears the current plan.")) return;
+    setBusy(true); closeTrip();
+    try {
+      apply(await api("/api/action", body), []);
+      toast({cancel_flight:"Flight rebooked", delay_flight:"Flight delayed — itinerary re-anchored",
+             change_dates:"Dates updated", new_trip:"Started a new trip"}[intent]);
+    } catch (e) { toast("Action failed: " + e.message); }
+    finally { setBusy(false); }
+  }
+
+  async function shareTrip() {
+    const url = `${location.origin}/?sid=${encodeURIComponent(sid)}`;
+    try { await navigator.clipboard.writeText(url); toast("Trip link copied"); }
+    catch { window.prompt("Copy this trip link:", url); }
+  }
+
   // ----- wire up -----
   function init() {
     buildFlaps();
+    fillSelects();
     $("#form").addEventListener("submit", e => { e.preventDefault(); send($("#input").value); });
     $("#sampleBtn").addEventListener("click", async () => {
       setBusy(true);
@@ -291,9 +392,29 @@
     });
     $("#resetBtn").addEventListener("click", async () => {
       if (!confirm("Start a brand-new trip? This clears the current conversation.")) return;
-      apply(await api("/api/reset", {}), []);
+      apply(await api("/api/reset", {}), []); toast("Cleared — fresh trip");
     });
+
+    // quick-plan
+    $("#quickBtn").addEventListener("click", toggleQuick);
+    $("#quickPanel").addEventListener("submit", e => { e.preventDefault(); quickPlan(); });
+
+    // trip actions menu (event-delegated)
+    $("#tripBtn").addEventListener("click", e => { e.stopPropagation(); toggleTrip(); });
+    $("#tripPop").addEventListener("click", e => {
+      const btn = e.target.closest("[data-act]"); if (btn) tripAction(btn.dataset.act);
+    });
+    $("#shareBtn").addEventListener("click", shareTrip);
+    $("#printBtn").addEventListener("click", () => window.print());
+
+    // dismiss the menu on outside click / Escape
+    document.addEventListener("click", e => { if (!e.target.closest("#tripMenu")) closeTrip(); });
+    document.addEventListener("keydown", e => { if (e.key === "Escape") { closeTrip(); } });
+
     api("/api/state").then(p => apply(p, [])).catch(()=>apply({state:{history:[],brief:{},itinerary:null,llm_calls:0,session_id:sid},flags:lastFlags},[]));
+
+    // deep link: /?quick=1 opens the quick-plan panel straight away
+    if (new URLSearchParams(location.search).get("quick") === "1") toggleQuick();
   }
   document.addEventListener("DOMContentLoaded", init);
 })();
