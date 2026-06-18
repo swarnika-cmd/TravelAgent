@@ -1,60 +1,133 @@
-from pydantic import BaseModel, model_validator
-from typing import Optional, Tuple, List
+"""
+Data models — single source of truth for shape.
+"""
+from pydantic import BaseModel, Field
+from typing import Optional, List, Dict, Literal
 
-class TravelBrief(BaseModel):
+
+# ----- Trip brief -------------------------------------------------------------
+
+class CityStop(BaseModel):
+    city: str
+    nights: int
+
+
+class Brief(BaseModel):
     origin: Optional[str] = None
-    destination: Optional[str] = None
-    travel_date: Optional[str] = None
+    destinations: List[CityStop] = []
+    travel_date: Optional[str] = None       # YYYY-MM-DD
     duration_days: Optional[int] = None
-    traveller_count: Optional[int] = 1
-    budget_range: Optional[Tuple[int, int]] = None
-    accommodation_preferences: List[str] = []
-    soft_constraints: List[str] = []
-    is_complete: bool = False
+    traveller_count: int = 1
+    budget_max_inr: Optional[int] = None
+    budget_mode: str = "none"               # none | cap | any | cheapest
+    vibe: Optional[str] = None              # adventure | relaxation | heritage | religious | party | nature | family | honeymoon | food
 
-    @model_validator(mode='after')
-    def check_completeness(self) -> 'TravelBrief':
-        # Check that origin, destination, travel_date, and duration_days are present and valid
-        has_origin = bool(self.origin and self.origin.strip())
-        has_destination = bool(self.destination and self.destination.strip())
-        has_date = bool(self.travel_date and self.travel_date.strip())
-        has_duration = self.duration_days is not None and self.duration_days > 0
-        
-        # Determine overall completeness
-        self.is_complete = bool(has_origin and has_destination and has_date and has_duration)
-        return self
+    @property
+    def destination(self) -> Optional[str]:
+        return self.destinations[0].city if self.destinations else None
+
+    @property
+    def budget_resolved(self) -> bool:
+        return self.budget_mode != "none"
+
+    @property
+    def is_complete(self) -> bool:
+        return bool(self.origin and self.destinations and self.travel_date
+                    and self.duration_days and self.duration_days > 0)
+
+
+# ----- Itinerary pieces -------------------------------------------------------
 
 class Flight(BaseModel):
     flight_id: str
     airline: str
     origin: str
     destination: str
-    outbound_departure_time: str
-    outbound_arrival_time: str
-    inbound_departure_time: str
-    inbound_arrival_time: str
-    price: int
-    details: str
+    depart_time: str
+    arrive_time: str
+    price_inr: int
+    stops: int = 0
+
 
 class Hotel(BaseModel):
     hotel_id: str
     name: str
-    location: str
-    price_per_night: int
+    city: str
+    price_per_night_inr: int
     rating: float
-    preferences: List[str]
-    details: str
 
-class ItineraryEvent(BaseModel):
-    timestamp: str  # ISO-8601 string
-    event_type: str  # e.g., FLIGHT_DEPARTURE, FLIGHT_ARRIVAL, HOTEL_CHECK_IN, HOTEL_CHECK_OUT
-    description: str
-    location: str
-    details: dict
 
-class FinalItinerary(BaseModel):
-    flight: Flight
-    hotel: Hotel
-    total_cost: int
-    timeline: List[ItineraryEvent]
+class Activity(BaseModel):
+    name: str
+    city: str
+    type: str
+    duration_hours: float
+    price_inr: int
+    best_time: Literal["morning", "afternoon", "evening"] = "afternoon"
 
+
+class Restaurant(BaseModel):
+    name: str
+    city: str
+    cuisine: str
+    price_per_person_inr: int
+    meal_type: Literal["breakfast", "lunch", "dinner", "all-day"] = "all-day"
+
+
+class TimelineEvent(BaseModel):
+    time: str            # HH:MM
+    kind: str            # FLIGHT_DEPART | FLIGHT_ARRIVE | HOTEL_CHECKIN | ACTIVITY | MEAL | TRANSIT_DEPART | TRANSIT_ARRIVE
+    title: str
+    note: str = ""
+    cost_inr: int = 0
+
+
+class DayPlan(BaseModel):
+    day_number: int
+    date: str
+    city: str
+    events: List[TimelineEvent] = []
+    cost_inr: int = 0
+
+
+class DestinationSuggestion(BaseModel):
+    city: str
+    why: str
+    rough_cost_inr: Optional[int] = None
+
+
+class SimilarTraveler(BaseModel):
+    summary: str
+    chosen: List[str] = []
+    budget_inr: Optional[int] = None
+    similarity: float = 0.0
+
+
+class Itinerary(BaseModel):
+    brief: Brief
+    flight: Optional[Flight] = None
+    hotels: List[Hotel] = []
+    days: List[DayPlan] = []
+    total_cost_inr: int = 0
+    similar_travelers: List[SimilarTraveler] = []
+
+
+# ----- Agent reply ------------------------------------------------------------
+
+class AgentReply(BaseModel):
+    text: str
+    suggestions: List[DestinationSuggestion] = []
+    itinerary: Optional[Itinerary] = None
+    changed_itinerary: Optional[Itinerary] = None
+
+
+# ----- Conversation state -----------------------------------------------------
+
+class ConversationState(BaseModel):
+    session_id: str
+    history: List[Dict[str, str]] = []
+    brief: Brief = Field(default_factory=Brief)
+    visited_already: List[str] = []
+    last_suggestions: List[str] = []
+    itinerary: Optional[Itinerary] = None
+    llm_calls: int = 0

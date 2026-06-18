@@ -4,6 +4,11 @@
 .env.*.local
 *.env
 
+# Runtime artifacts — regenerated on every run
+data/cache/
+data/sessions/
+data/raw/
+
 # Python caching
 __pycache__/
 *.pyc
