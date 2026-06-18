@@ -4,7 +4,6 @@ Session persistence + per-session LLM rate limit.
 Each chat session has its own JSON file under data/sessions/.
 Rate limit is enforced inline by the agent before any LLM call.
 """
-import json
 from pathlib import Path
 from schemas import ConversationState
 

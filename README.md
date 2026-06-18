@@ -1,31 +1,48 @@
 # Agentic Travel Planner
 
-A chat-style travel agent for India. Tell it anything about your trip — even just "I want to plan a trip" — and it asks the right follow-up questions, suggests destinations that fit your vibe, plans the day-by-day itinerary, and handles disruptions (delays, cancellations) when you tell it about them.
+A chat-style travel planner for India. Tell it anything about your trip — even just *"I want to plan a trip"* — and it asks the right follow-up questions, suggests destinations that fit your vibe, plans the day-by-day itinerary, and handles disruptions (delays, cancellations) when you tell it about them.
 
-## How it actually works
+## What it does
 
-There is **no model training**. The agent is a small Python state machine wrapped around three things:
+```
+USER  Bangalore to Kerala for 5 days with 3 people, no budget
+AGENT What kind of trip — adventure, religious, nature, party...?
 
-1. **Google Gemini** — language understanding, smart questions, destination suggestion, on-demand activity / restaurant / hotel / transit generation for any Indian city. Uses a fallback chain: `gemini-3.1-flash-lite` → `gemini-2.5-flash-lite` → `gemini-2.5-flash`, auto-falling through on overload.
-2. **Sky-Scrapper (RapidAPI)** — live flight and hotel prices, with mock fallback when the key is missing or quota exhausted.
-3. **Sentence-transformers + FAISS** — semantic retrieval over the Kaggle Indian Travel Survey for personalization (falls back to 5 hand-written personas if the index isn't built).
+USER  nature
+AGENT Picks Munnar (2n) + Alleppey (2n) + Kochi (1n) for you.
+      Plans Day 1...5 with morning/afternoon/evening activities,
+      breakfast/lunch/dinner picks, inter-city transit.
+      Total ₹47,820 (mid-tier, per-room hotels, train inter-city).
+
+USER  my flight got cancelled
+AGENT Re-books the next-cheapest flight and re-anchors all check-ins.
+```
+
+## Architecture
+
+No model training, no heavy backend. A small Python state machine around three free services:
+
+1. **Google Gemini** — language understanding, destination suggestion, and on-demand generation of activities / restaurants / hotels / transit for any Indian city.
+   Fallback chain: `gemini-3.1-flash-lite` → `gemini-2.5-flash-lite` → `gemini-2.5-flash`. Auto-walks the chain on 503 / overload.
+2. **Sky-Scrapper (RapidAPI)** — live flight + hotel prices. Mocks gracefully when the key is missing or quota is gone.
+3. **Sentence-transformers + FAISS** — local semantic retrieval over the Kaggle Indian Travel Survey for the "people like you" personalization. Falls back to 5 hand-written personas if you haven't built the index.
 
 ## Files
 
 ```
-app.py              Streamlit chat UI
-agent.py            Conversation orchestrator — single respond() function
+app.py              Streamlit chat UI (single file)
+agent.py            Conversation orchestrator — one respond() function
 schemas.py          Pydantic models
 llm.py              All Gemini calls (extract, suggest, generate)
 searcher.py         Sky-Scrapper client (live + mock)
-itinerary.py        Day-by-day plan builder
-critic.py           Conflict detector
-personalization.py  RAG retriever (+ index builder)
-storage.py          Session save/load + rate limiter
-data/sessions/      Saved conversations (per session)
-data/cache/         API + LLM response cache
-data/raw/           Drop Kaggle CSVs here
+itinerary.py        Day-by-day plan assembly
+critic.py           Conflict detector (chronology, budget, tight gaps)
+personalization.py  RAG retriever + index builder
+storage.py          Per-session JSON persistence + LLM rate limiter
+requirements.txt    Python deps
 ```
+
+Runtime artifacts in `data/cache/`, `data/sessions/`, `data/raw/` are gitignored.
 
 ## Setup
 
@@ -36,18 +53,18 @@ pip install -r requirements.txt
 Create `.env`:
 
 ```
-GEMINI_API_KEY=AIzaSy...           # from https://aistudio.google.com/apikey
-RAPIDAPI_KEY=your_rapidapi_key     # from https://rapidapi.com (optional)
+GEMINI_API_KEY=AIzaSy...                           # https://aistudio.google.com/apikey
+RAPIDAPI_KEY=your_rapidapi_key                     # https://rapidapi.com  (optional)
 RAPIDAPI_HOST=sky-scrapper.p.rapidapi.com
 ```
 
-Optional override of the model chain:
+Optional — override the Gemini model chain:
 
 ```
 GEMINI_MODEL=gemini-3.1-flash-lite,gemini-2.5-flash-lite,gemini-2.5-flash
 ```
 
-Without a RapidAPI key, flight/hotel search falls back to mock data — the rest of the agent still works.
+Without a RapidAPI key, flights/hotels come from mocks (the LLM still generates city-realistic hotel options). Everything else still works.
 
 ## Run
 
@@ -57,35 +74,76 @@ streamlit run app.py
 
 Opens at http://localhost:8501.
 
-## Optional: build the personalization index
+Try these:
 
-If you've put the Kaggle Indian Travel Survey CSV at `data/raw/travel_survey.csv`:
-
-```bash
-python personalization.py build
-```
-
-This produces a FAISS index used by the personalization retriever. Without it, you get 5 hand-written representative personas.
+- *"Bangalore to Mysore for 3 days with 3 people, cheapest possible"*
+- *"I want a 5-day adventure trip from Delhi, no budget"*
+- *"Couple from Mumbai going to Kerala in August, 7 days, ₹80000"*
+- *"Plan a religious trip from Chennai for 4 days under 25k"*
 
 ## How the chat flow works
 
-1. Agent asks for whatever's missing — one thing at a time.
-2. If you give a city, it uses it. If you only give a vibe (adventure / heritage / religious / etc.), it suggests 3 specific Indian cities.
-3. If you reply "I've already been to X" or "show me more", it excludes those and suggests fresh ones.
-4. Once origin / destination / date / duration / budget are all filled, it plans.
-5. After planning, type "my flight got cancelled" / "delay 3 hours" / "change to 2026-08-15" — it detects the intent and re-plans.
+1. Agent asks for whatever's missing — **one thing at a time** (origin / dates / duration / budget / vibe).
+2. If you give a state ("Kerala", "Rajasthan"), it picks **multiple cities** in that state matched to the vibe and distributes nights sensibly.
+3. If you only give a vibe (no destination), it **suggests 3 specific cities**; "I've been to X" or "show me more" excludes them.
+4. Once every required field is filled, it plans and shows the full itinerary.
+5. After the plan exists, type something like *"my flight got cancelled"* / *"delay 3 hours"* / *"change to 2026-08-15"* and the agent re-plans the affected leg.
+
+## How the cost is calculated
+
+Realistic, not naive:
+
+- **Flight** — only if the LLM says flight is the right mode for the route distance. Otherwise ground transit (train/bus/cab) is inserted on Day 1. Flight cost × travellers.
+- **Hotels** — per **room**, not per person. 1-3 people = 1 room, 4-6 = 2 rooms, etc.
+- **Activities + meals** — per person.
+- **Inter-city transit** — train under ~600 km, flight over ~1200 km, cab/bus in between.
+- **Budget mode** controls hotel pick: `cap` = best-rated within budget; `cheapest` = cheapest available; `any` = mid-tier (not max luxury); `none` = agent asks first.
+
+## Personalization (RAG)
+
+Each plan includes the top 3 "similar travelers" retrieved from a survey corpus. Without the dataset, you get 5 representative personas. To use real data:
+
+1. Drop `travel_survey.csv` from the Kaggle Indian Travel Survey at `data/raw/travel_survey.csv`.
+2. Build the index once:
+   ```bash
+   python personalization.py build
+   ```
+3. Run as normal — embeddings live in `data/cache/rag/`.
 
 ## Per-session rate limit
 
-Each chat session is capped at 80 LLM calls (configurable in `storage.py`). Click "Clear chat & start over" in the sidebar to reset.
+Each chat is capped at **80 LLM calls** (configurable in `storage.py`). The sidebar shows usage. "Clear chat & start over" resets the counter and the saved JSON.
 
 ## Assignment coverage
 
 | Requirement | Where |
 |---|---|
-| Travel Brief Intake | `llm.extract_updates` in every turn |
+| Travel Brief Intake | `llm.extract_updates` runs every turn |
 | Agentic Search | `searcher` (live + mock) + `llm.generate_*` for unknown cities |
-| Itinerary Assembly | `itinerary.build` |
-| Conflict Resolution | `critic.validate` |
-| Change Management | `agent._handle_change` (cancel / delay / dates / new) |
-| Traveller Dashboard | `app.py` with timeline, bookings, personalization panel, chat |
+| Itinerary Assembly | `itinerary.build` — day-by-day, multi-city, transit-aware |
+| Conflict Resolution | `critic.validate` — chronology, budget, tight gaps |
+| Change Management | `agent._handle_change` — cancel / delay / dates / new trip |
+| Traveller Dashboard | `app.py` — chat + sidebar + bookings tab + day-plan tab |
+
+## Project layout map
+
+```
+.
+├── app.py              # entry
+├── agent.py            # orchestrator
+├── schemas.py          # types
+├── llm.py              # Gemini wrapper
+├── searcher.py         # Sky-Scrapper
+├── itinerary.py        # day builder
+├── critic.py           # validator
+├── personalization.py  # RAG
+├── storage.py          # session + rate limit
+├── requirements.txt
+├── README.md
+├── .env                # local secrets (gitignored)
+├── .gitignore
+└── data/
+    ├── cache/          # LLM + API caches (gitignored)
+    ├── sessions/       # per-user chat JSONs (gitignored)
+    └── raw/            # optional Kaggle CSVs (gitignored)
+```
