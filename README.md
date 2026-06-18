@@ -81,6 +81,34 @@ Try these:
 - *"Couple from Mumbai going to Kerala in August, 7 days, ₹80000"*
 - *"Plan a religious trip from Chennai for 4 days under 25k"*
 
+## Web UI — "Safar"
+
+A second, design-led frontend lives in `web/`, served by a tiny stdlib HTTP
+server. **No extra dependencies, no build step** — it talks to the same
+`agent.respond()` the Streamlit app uses.
+
+```bash
+python server.py            # http://127.0.0.1:8000
+python server.py --port 9000
+```
+
+The trip is presented as a journey on a **split-flap departure board** with a
+day-by-day route line, boarding-pass / reservation tickets, and the
+"travellers like you" matches. The conversation drives everything from a side
+rail.
+
+No Gemini key yet? Click **Explore a sample trip** (or `POST /api/sample`) to
+load a complete Bangalore → Kerala itinerary and tour the whole interface
+offline. Add `GEMINI_API_KEY` to chat live.
+
+| Route | Does |
+|---|---|
+| `GET /` | the app (`web/index.html`) |
+| `GET /api/state?sid=` | current conversation state + runtime flags |
+| `POST /api/chat` | `{sid, message}` → agent reply + new state |
+| `POST /api/reset` | clear the session |
+| `POST /api/sample` | seed a ready-made sample trip |
+
 ## How the chat flow works
 
 1. Agent asks for whatever's missing — **one thing at a time** (origin / dates / duration / budget / vibe).
@@ -123,13 +151,15 @@ Each chat is capped at **80 LLM calls** (configurable in `storage.py`). The side
 | Itinerary Assembly | `itinerary.build` — day-by-day, multi-city, transit-aware |
 | Conflict Resolution | `critic.validate` — chronology, budget, tight gaps |
 | Change Management | `agent._handle_change` — cancel / delay / dates / new trip |
-| Traveller Dashboard | `app.py` — chat + sidebar + bookings tab + day-plan tab |
+| Traveller Dashboard | `app.py` (Streamlit) **and** `server.py` + `web/` (Safar web UI) |
 
 ## Project layout map
 
 ```
 .
-├── app.py              # entry
+├── app.py              # Streamlit entry
+├── server.py           # stdlib web server for the Safar UI (no extra deps)
+├── web/                # Safar frontend — index.html / styles.css / app.js
 ├── agent.py            # orchestrator
 ├── schemas.py          # types
 ├── llm.py              # Gemini wrapper
