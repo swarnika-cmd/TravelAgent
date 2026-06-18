@@ -311,10 +311,6 @@ my flight got cancelled   ·   delay 3 hours   ·   change to 2026-08-15
 
 ---
 
-<div align="center">
-<br>
-<sub>Built with a small Python state machine, Google Gemini, and care for the journey.</sub>
-</div>
 
 ## Running the Test Suite
 
@@ -366,3 +362,7 @@ The suite mocks external services (`llm`, `storage`, `searcher`, etc.) and verif
 * Tests focus on resilience, validation, and recovery behavior rather than itinerary quality.
 </details>
 
+<div align="center">
+<br>
+<sub>Built with a small Python state machine, Google Gemini, and care for the journey.</sub>
+</div>
