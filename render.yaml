@@ -9,8 +9,7 @@ services:
       - key: GEMINI_API_KEY
         sync: false # User will be prompted to enter this in Render Dashboard
       - key: RAPIDAPI_KEY
-        sync: false # Optional
-        value: ""
+        value: "" # Optional (will default to mock if left empty)
       - key: RAPIDAPI_HOST
         value: "sky-scrapper.p.rapidapi.com"
 
@@ -24,7 +23,6 @@ services:
       - key: GEMINI_API_KEY
         sync: false # User will be prompted to enter this in Render Dashboard
       - key: RAPIDAPI_KEY
-        sync: false # Optional
-        value: ""
+        value: "" # Optional (will default to mock if left empty)
       - key: RAPIDAPI_HOST
         value: "sky-scrapper.p.rapidapi.com"
